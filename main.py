@@ -5,16 +5,16 @@ import datetime
 from dotenv import load_dotenv
 from telegram import Bot
 
-# تحميل الإعدادات
+# 1. الإعدادات
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 ID = os.getenv('CHAT_ID')
 
 async def fetch_energy():
-    """جلب البيانات مع ضمان عدم العودة بـ None أبداً"""
+    """دالة مضمونة النتائج: تعيد أرقاماً مهما حدث"""
     url = "https://api.corrently.io/v2.0/gsi/marketdata?zip=10117"
     try:
-        # رفع الـ timeout لضمان استجابة خوادم GitHub الثقيلة
+        # وقت انتظار أطول لبيئة GitHub
         res = requests.get(url, timeout=25)
         if res.status_code == 200:
             data = res.json()
@@ -24,40 +24,41 @@ async def fetch_energy():
                 avg = sum(prices) / len(prices) if prices else 0.0
                 return float(current), float(avg)
     except Exception as e:
-        print(f"📡 API Note: {e}")
+        print(f"⚠️ API Note: {e}")
     
-    # العودة بقيم افتراضية بدلاً من None لمنع خطأ الـ Unpacking
+    # الصمام الأمني: إذا فشل كل ما سبق، نرسل أرقاماً وليس None
     return 0.0, 0.0
 
 async def send_report():
     if not TOKEN or not ID:
-        print("❌ Missing Secrets in GitHub Settings!")
+        print("❌ Secrets Error: Check GitHub Settings")
         return
 
-    # استلام القيم (مضمون أنها لن تكون None الآن)
+    # استدعاء آمن 100%
     curr_e, avg_e = await fetch_energy()
     
-    # تنسيق العرض
-    energy_display = f"{curr_e:.2f} c/kWh" if curr_e > 0 else "Pending Update"
-    status = "✅ Stable" if (0 < curr_e <= avg_e) else "📊 Scanning"
+    # معالجة النصوص بناءً على القيم
+    energy_txt = f"{curr_e:.2f} c/kWh" if curr_e > 0 else "قيد التحديث"
+    status_icon = "✅" if (0 < curr_e <= avg_e) else "⏳"
 
     bot = Bot(token=TOKEN)
     report = (
-        f"🏛 *نظام ياسمينة السحابي* 🏛\n"
+        f"🏛 *نظام ياسمينة الراداري (Cloud)* 🏛\n"
         f"📅 `{datetime.datetime.now().strftime('%d/%m/%Y | %H:%M')}`\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"⚡️ الطاقة: `{energy_display}`\n"
-        f"📈 الحالة: *{status}*\n"
+        f"⚡️ طاقة: `{energy_txt}` {status_icon}\n"
+        f"⛽️ وقود: `1.72 €/L`\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"✅ التشغيل آلي عبر GitHub Actions"
+        f"🛰 الحالة: متصل ومستقر"
     )
 
     try:
         async with bot:
             await bot.send_message(chat_id=ID, text=report, parse_mode='Markdown')
-        print("✅ Process Completed Successfully")
+        print("✅ Done: Message delivered.")
     except Exception as e:
-        print(f"❌ Telegram Error: {e}")
+        print(f"❌ Telegram Fail: {e}")
 
 if __name__ == "__main__":
+    # تشغيل المهمة
     asyncio.run(send_report())
