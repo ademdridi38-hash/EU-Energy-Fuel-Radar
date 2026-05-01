@@ -23,8 +23,10 @@ async def fetch_energy():
             all_prices = [item.get('marketprice') for item in data['data'] if item.get('marketprice')]
             avg_p = sum(all_prices) / len(all_prices) if all_prices else None
             return current_p, avg_p
-    except:
-        return None, None
+    except Exception as e:
+        print(f"⚠️ fetch_energy() failed: {e}")
+    
+    return None, None
 
 async def fetch_flights():
     deals = [("Paris 🇫🇷 ➔ Berlin 🇩🇪", 19.99), ("Tunis 🇹🇳 ➔ Marseille 🇫🇷", 45.00), ("Madrid 🇪🇸 ➔ Rome 🇮🇹", 15.50)]
