@@ -2,68 +2,64 @@ import os
 import requests
 import asyncio
 import datetime
-import random
 from dotenv import load_dotenv
 from telegram import Bot
-from telegram.constants import ParseMode
 
-# تحميل الإعدادات (تعمل محلياً من .env وفي GitHub من الـ Secrets)
+# تحميل الإعدادات
 load_dotenv()
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
-CHAT_ID = os.getenv('CHAT_ID')
+TOKEN = os.getenv('TELEGRAM_TOKEN')
+ID = os.getenv('CHAT_ID')
 
 async def fetch_energy():
+    """دالة جلب البيانات مع ضمان إعادة قيم رقمية أو أصفار عند الفشل"""
     url = "https://api.corrently.io/v2.0/gsi/marketdata?zip=10117"
     try:
-        res = requests.get(url, timeout=15)
-        res.raise_for_status()
-        data = res.json()
-        if 'data' in data and len(data['data']) > 0:
-            current_p = data['data'][0].get('marketprice')
-            all_prices = [item.get('marketprice') for item in data['data'] if item.get('marketprice')]
-            avg_p = sum(all_prices) / len(all_prices) if all_prices else None
-            return current_p, avg_p
+        # إضافة timeout أطول لبيئة GitHub Cloud
+        res = requests.get(url, timeout=20)
+        if res.status_code == 200:
+            data = res.json()
+            if 'data' in data and len(data['data']) > 0:
+                current = data['data'][0].get('marketprice')
+                # حساب المتوسط بأمان
+                prices = [item.get('marketprice') for item in data['data'] if item.get('marketprice')]
+                avg = sum(prices) / len(prices) if prices else 0
+                return current, avg
     except Exception as e:
-        print(f"⚠️ fetch_energy() failed: {e}")
+        print(f"📡 API Warning: {e}")
     
-    return None, None
-
-async def fetch_flights():
-    deals = [("Paris 🇫🇷 ➔ Berlin 🇩🇪", 19.99), ("Tunis 🇹🇳 ➔ Marseille 🇫🇷", 45.00), ("Madrid 🇪🇸 ➔ Rome 🇮🇹", 15.50)]
-    return random.choice(deals)
-
-def analyze_market(current, avg):
-    if current is None or avg is None: return "⚪️ الحالة: غير متوفرة"
-    diff = ((current - avg) / avg) * 100
-    if diff < -10: return "🔥 الحالة: فرصة توفير كبيرة"
-    return "✅ الحالة: سعر جيد" if diff < 0 else "⚠️ الحالة: سعر مرتفع"
+    # في حال الفشل، نعيد أصفار بدلاً من None لمنع خطأ الـ Unpacking
+    return 0.0, 0.0
 
 async def send_report():
-    if not TELEGRAM_TOKEN or not CHAT_ID:
-        print("❌ Missing Environment Variables")
+    if not TOKEN or not ID:
+        print("❌ Secrets missing!")
         return
 
-    bot = Bot(token=TELEGRAM_TOKEN)
+    # جلب البيانات (الآن آمنة تماماً)
     curr_e, avg_e = await fetch_energy()
-    route, price = await fetch_flights()
     
-    energy_val = f"{curr_e:.2f} c/kWh" if curr_e is not None else "تحديث جاري..."
-    
+    # منطق الرسالة
+    energy_status = "✅ جيد" if curr_e <= avg_e and curr_e != 0 else "⚠️ مرتفع أو غير متوفر"
+    energy_display = f"{curr_e:.2f} c/kWh" if curr_e != 0 else "جاري التحديث..."
+
+    bot = Bot(token=TOKEN)
     report = (
-        f"🏛 *نظام ياسمينة الذاتي (GitHub Cloud)* 🏛\n"
+        f"🏛 *نظام ياسمينة السحابي (V4)* 🏛\n"
         f"📅 `{datetime.datetime.now().strftime('%d/%m/%Y | %H:%M')}`\n"
-        f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚡️ *الطاقة:* `{energy_val}`\n"
-        f"📈 *التحليل:* {analyze_market(curr_e, avg_e)}\n\n"
-        f"✈️ *أرخص رحلة:* `{route}`\n"
-        f"💰 السعر: *{price:.2f} €*\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"🤖 *الوضع:* أتمتة كاملة (Serverless)"
+        f"⚡️ طاقة: `{energy_display}`\n"
+        f"📊 تحليل: *{energy_status}*\n"
+        f"━━━━━━━━━━━━━━━━━━\n"
+        f"🤖 التشغيل: GitHub Actions Success"
     )
 
-    await bot.send_message(chat_id=CHAT_ID, text=report, parse_mode=ParseMode.MARKDOWN)
-    print("✅ Report Sent Successfully via GitHub Actions")
+    try:
+        # استخدام الطريقة المتوافقة مع أحدث نسخ المكتبة
+        async with bot:
+            await bot.send_message(chat_id=ID, text=report, parse_mode='Markdown')
+        print("🚀 Success! Message sent.")
+    except Exception as e:
+        print(f"❌ Telegram Error: {e}")
 
 if __name__ == "__main__":
-    # تشغيل المهمة مرة واحدة فقط
     asyncio.run(send_report())
