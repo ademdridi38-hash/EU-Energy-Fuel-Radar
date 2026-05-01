@@ -7,90 +7,61 @@ from dotenv import load_dotenv
 from telegram import Bot
 from telegram.constants import ParseMode
 
-# 1. تحميل الإعدادات من ملف .env المخفي
+# تحميل الإعدادات (تعمل محلياً من .env وفي GitHub من الـ Secrets)
 load_dotenv()
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 CHAT_ID = os.getenv('CHAT_ID')
 
-# التحقق من وجود البيانات لضمان عدم توقف البرنامج
-if not TELEGRAM_TOKEN or not CHAT_ID:
-    print("❌ خطأ: لم يتم العثور على TELEGRAM_TOKEN أو CHAT_ID في ملف .env")
-    exit()
-
-bot = Bot(token=TELEGRAM_TOKEN)
-
-# 2. وظائف جلب البيانات
 async def fetch_energy():
-    """جلب أسعار الكهرباء من ألمانيا"""
     url = "https://api.corrently.io/v2.0/gsi/marketdata?zip=10117"
     try:
-        res = requests.get(url, timeout=10)
+        res = requests.get(url, timeout=15)
+        res.raise_for_status()
         data = res.json()
-        current_p = data['data'][0]['marketprice']
-        all_prices = [item['marketprice'] for item in data['data']]
-        avg_p = sum(all_prices) / len(all_prices)
-        return current_p, avg_p
+        if 'data' in data and len(data['data']) > 0:
+            current_p = data['data'][0].get('marketprice')
+            all_prices = [item.get('marketprice') for item in data['data'] if item.get('marketprice')]
+            avg_p = sum(all_prices) / len(all_prices) if all_prices else None
+            return current_p, avg_p
     except:
         return None, None
 
 async def fetch_flights():
-    """محاكاة صيد رحلات طيران رخيصة"""
-    deals = [
-        ("Paris 🇫🇷 ➔ Berlin 🇩🇪", 19.99),
-        ("Tunis 🇹🇳 ➔ Marseille 🇫🇷", 45.00),
-        ("Madrid 🇪🇸 ➔ Rome 🇮🇹", 15.50)
-    ]
+    deals = [("Paris 🇫🇷 ➔ Berlin 🇩🇪", 19.99), ("Tunis 🇹🇳 ➔ Marseille 🇫🇷", 45.00), ("Madrid 🇪🇸 ➔ Rome 🇮🇹", 15.50)]
     return random.choice(deals)
 
-# 3. المنطق الرياضي للتحليل
 def analyze_market(current, avg):
-    if current is None: return "⚪️ غير متاح"
+    if current is None or avg is None: return "⚪️ الحالة: غير متوفرة"
     diff = ((current - avg) / avg) * 100
-    if diff < -10: return "🔥 فرصة توفير كبيرة"
-    if diff < 0: return "✅ سعر جيد"
-    return "⚠️ سعر مرتفع"
+    if diff < -10: return "🔥 الحالة: فرصة توفير كبيرة"
+    return "✅ الحالة: سعر جيد" if diff < 0 else "⚠️ الحالة: سعر مرتفع"
 
-# 4. إرسال التقرير الشامل
-async def send_intelligence_report():
-    print(f"📡 جاري تحليل البيانات... {datetime.datetime.now().strftime('%H:%M:%S')}")
-    
+async def send_report():
+    if not TELEGRAM_TOKEN or not CHAT_ID:
+        print("❌ Missing Environment Variables")
+        return
+
+    bot = Bot(token=TELEGRAM_TOKEN)
     curr_e, avg_e = await fetch_energy()
     route, price = await fetch_flights()
     
-    status = analyze_market(curr_e, avg_e)
+    energy_val = f"{curr_e:.2f} c/kWh" if curr_e is not None else "تحديث جاري..."
     
     report = (
-        f"🏛 *نظام ياسمينة للاستخبارات الاقتصادية* 🏛\n"
+        f"🏛 *نظام ياسمينة الذاتي (GitHub Cloud)* 🏛\n"
         f"📅 `{datetime.datetime.now().strftime('%d/%m/%Y | %H:%M')}`\n"
         f"━━━━━━━━━━━━━━━━━━\n\n"
-        f"⚡️ *قطاع الطاقة (EU):*\n"
-        f"• السعر: `{curr_e:.2f} c/kWh`\n"
-        f"• الحالة: *{status}*\n\n"
-        f"⛽️ *قطاع الوقود (E5):*\n"
-        f"• السعر المتوقع: `1.70 €/L` 🟢\n\n"
-        f"✈️ *أرخص رحلة اليوم:*\n"
-        f"🎫 `{route}`\n"
+        f"⚡️ *الطاقة:* `{energy_val}`\n"
+        f"📈 *التحليل:* {analyze_market(curr_e, avg_e)}\n\n"
+        f"✈️ *أرخص رحلة:* `{route}`\n"
         f"💰 السعر: *{price:.2f} €*\n\n"
         f"━━━━━━━━━━━━━━━━━━\n"
-        f"🤖 *حالة البوت:* آمن ومتصل عبر بيئة العمل الخاصة."
+        f"🤖 *الوضع:* أتمتة كاملة (Serverless)"
     )
 
-    try:
-        await bot.send_message(chat_id=CHAT_ID, text=report, parse_mode=ParseMode.MARKDOWN)
-        print("✅ تم إرسال التقرير بنجاح!")
-    except Exception as e:
-        print(f"❌ فشل الإرسال: {e}")
-
-# 5. الدورة التشغيلية
-async def main():
-    print("🚀 الرادار المحدث يعمل الآن بنظام الأمان .env")
-    # إرسال تقرير فور التشغيل للتأكد من الربط
-    await send_intelligence_report()
-    
-    while True:
-        # فحص كل 6 ساعات
-        await asyncio.sleep(21600)
-        await send_intelligence_report()
+    await bot.send_message(chat_id=CHAT_ID, text=report, parse_mode=ParseMode.MARKDOWN)
+    print("✅ Report Sent Successfully via GitHub Actions")
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    # تشغيل المهمة مرة واحدة فقط
+    asyncio.run(send_report())
