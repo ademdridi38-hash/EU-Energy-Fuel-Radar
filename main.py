@@ -5,7 +5,7 @@ import datetime
 from dotenv import load_dotenv
 from telegram import Bot
 
-# 1. شحن الإعدادات
+# 1. شحن الإعدادا��
 load_dotenv()
 TOKEN = os.getenv('TELEGRAM_TOKEN')
 ID = os.getenv('CHAT_ID')
@@ -52,7 +52,7 @@ async def send_report():
     try:
         bot = Bot(token=TOKEN)
         async with bot:
-            await bot.send_message(chat_id=ID, text=report, parse_mode='Markdown')
+            await bot.send_message(chat_id=int(ID), text=report, parse_mode='Markdown')
         print("🚀 Success: Message dispatched to Telegram")
     except Exception as e:
         print(f"❌ Telegram Error: {e}")
